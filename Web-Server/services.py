@@ -18,10 +18,14 @@ class InputToOutputAudio:
 
     def __inputAudioToText(self, audio_path):
         ibm_stt = self.authenticator()
-        with open(audio_path, 'rb') as audio_file:
-            audio_text_data = ibm_stt.recognize(audio=audio_file, content_type='audio/mp3', model='en-AU_NarrowbandModel', continuous=True).get_result()
-        audio_text = audio_text_data['results'][0]['alternatives'][0]['transcript']
-        print('Recognized Text : ', audio_text)
+        try:
+            with open(audio_path, 'rb') as audio_file:
+                audio_text_data = ibm_stt.recognize(audio=audio_file, content_type='application/octet-stream', model='en-US_NarrowbandModel', speech_detector_sensitivity=0.3, continous=True).get_result()
+            print(audio_text_data)
+            audio_text = audio_text_data['results'][0]['alternatives'][0]['transcript']
+            print('Recognized Text : ', audio_text)
+        except:
+            audio_text = None
         return audio_text
     
     def __translateText(self, input_text, from_language, to_language):
@@ -36,15 +40,20 @@ class InputToOutputAudio:
     
     def inputToOutputAudio(self, audio_path, to_lang='en-us', tgt_lang='hi'):
         recog_audio_text = self.__inputAudioToText(audio_path)
-        translated_text = self.__translateText(recog_audio_text, to_lang, tgt_lang)
-        output_audio = self.__translatedTexttoOutputAudio(translated_text, tgt_lang)
-
-        output_filename = audio_path[audio_path.rindex('\\')+1:]
-        output_audio_path, response = os.path.join(os.getcwd(), 'output_data', output_filename), 'HTTP 200'
-        output_audio.save(output_audio_path)
-        print('========================================\n')
         
-        return response, output_audio_path
+        if recog_audio_text != None:
+            translated_text = self.__translateText(recog_audio_text, to_lang, tgt_lang)
+            output_audio = self.__translatedTexttoOutputAudio(translated_text, tgt_lang)
+
+            output_filename = audio_path[audio_path.rindex('\\')+1:]
+            
+            output_audio_path, response = os.path.join(os.getcwd(), 'output_data', output_filename), 200
+            output_audio.save(output_audio_path)
+            print('<========================================>\n')
+
+            return response, output_audio_path
+        else:
+            return None
 
 class RandomTextGenerator:
 

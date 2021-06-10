@@ -1,28 +1,57 @@
+// <----- Importing Necessary Modules ----->
 import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-enum AudioState { fresh_record, recording, stop, play }
+// <----- Importing UserDefined Modules ----->
+import 'alerts.dart';
+import 'services.dart';
 
-const veryDarkBlue = Color(0xff172133);
-const kindaDarkBlue = Color(0xff202641);
+// <---- File Constants ---->
+final serverServices = ServerServices();
+enum AudioState { fresh_record, recording, uploadDownload, stop, play }
+const kFrontColor = Color(0xFF26A69A);
+const kBackgroundColor = Color(0xFF00695C);
 
+// <---- Main Function ---->
 void main() {
   runApp(VTransify());
 }
 
-class VTransify extends StatefulWidget {
+// <---- Stateless Base Platform ---->
+class VTransify extends StatelessWidget {
   @override
-  _VTransifyState createState() => _VTransifyState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'VTransify',
+      home: Scaffold(
+        backgroundColor: kFrontColor,
+        appBar: AppBar(
+          title: Text('VTransify'),
+          centerTitle: true,
+          backgroundColor: kBackgroundColor,
+        ),
+        body: HomeScreen(),
+      ),
+    );
+  }
 }
 
-class _VTransifyState extends State<VTransify> {
+// <---- Stateful App HomeScreen ---->
+class HomeScreen extends StatefulWidget {
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _playBackReady = false, _mRecorderInit = false, _mPlayerInit = false;
+  late String? audioFilePath;
+  AudioState audioState = AudioState.fresh_record;
   FlutterSoundPlayer _mPlayer = FlutterSoundPlayer();
   FlutterSoundRecorder _mRecorder = FlutterSoundRecorder();
-  bool _mRecorderInit = false, _mPlayerInit = false, _playbackready = false;
 
-  AudioState audioState = AudioState.fresh_record;
-
+  // <---- Overriding Init State ---->
   @override
   void initState() {
     openAudioSources().then((value) {
@@ -34,18 +63,7 @@ class _VTransifyState extends State<VTransify> {
     super.initState();
   }
 
-  Future openAudioSources() async {
-    var status = await Permission.microphone.request();
-    if (status == PermissionStatus.granted) {
-      print('Permission Granted');
-    }
-    await _mPlayer.openAudioSession();
-    _mPlayerInit = true;
-
-    await _mRecorder.openAudioSession();
-    _mRecorderInit = true;
-  }
-
+  // <---- Overriding Dispose State ---->
   @override
   void dispose() {
     _mPlayer.closeAudioSession();
@@ -57,36 +75,81 @@ class _VTransifyState extends State<VTransify> {
     super.dispose();
   }
 
+  // <---- Open Audio Sources for Playing and Recording ---->
+  Future openAudioSources() async {
+    var status = await Permission.microphone.request();
+    print(status.isGranted);
+    if (status != PermissionStatus.granted) {
+      print('Permission Granted');
+    }
+
+    print(_mRecorderInit);
+    print(_mPlayerInit);
+
+    if (!_mPlayerInit) {
+      await _mPlayer.openAudioSession();
+    }
+
+    if (!_mRecorderInit) {
+      await _mRecorder.openAudioSession();
+    }
+  }
+
+  // <---------------- RECORDER FUNCTIONS ---------------->
+
+  // <---- Start Recording Function ---->
   void startRecording() async {
-    await _mRecorder.startRecorder(toFile: 'sample_voice.aac');
+    await _mRecorder.startRecorder(toFile: 'sample_voice.mp3', numChannels: 1, bitRate: 320000, sampleRate: 17000);
     setState(() {
-      _playbackready = true;
+      _playBackReady = true;
       audioState = AudioState.recording;
     });
   }
 
+  // <---- Stop Recording Function ---->
   void stopRecording() async {
-    await _mRecorder.stopRecorder();
+    String? filepath = await _mRecorder.stopRecorder();
+    print('Recording Path : ' + filepath.toString());
+
+    // Update State for UploadDownload
     setState(() {
-      audioState = AudioState.play;
+      audioFilePath = filepath;
+      audioState = AudioState.uploadDownload;
     });
+
+    String responseCode = await serverServices.uploadDownload(audioFilePath!);
+    if (responseCode != 'Error') {
+      setState(() {
+        audioFilePath = responseCode;
+        audioState = AudioState.play;
+      });
+    } else {
+      setState(() {
+        audioState = AudioState.fresh_record;
+        _playBackReady = false;
+        audioFilePath = '';
+        Alerts.showAlertDialog(context);
+      });
+    }
   }
 
-  void getRecordFunction() {
+  // <---- Determine Recording State Function ---->
+  void getRecordFunction() async {
     if (!_mRecorderInit) return;
-    print(_mRecorder.isStopped);
     return _mRecorder.isStopped ? startRecording() : stopRecording();
   }
 
+  // <---------------- PLAYER FUNCTIONS ---------------->
+
+  // <---- Start Player Function ---->
   void startPlayer() async {
-    if (_mPlayerInit &&
-        (_mPlayer.isStopped || _mPlayer.isPaused) &&
-        _playbackready) {
+    if (_mPlayerInit && (_mPlayer.isStopped || _mPlayer.isPaused) && _playBackReady) {
       if (_mPlayer.isPaused)
         _mPlayer.resumePlayer();
       else {
         await _mPlayer.startPlayer(
-            fromURI: 'sample_voice.aac',
+            fromURI: audioFilePath,
+            sampleRate: 320000,
             whenFinished: () {
               setState(() {
                 audioState = AudioState.stop;
@@ -99,6 +162,7 @@ class _VTransifyState extends State<VTransify> {
     }
   }
 
+  // <---- Stop/Pause Player Function ---->
   void stopPlayer() async {
     await _mPlayer.pausePlayer();
     setState(() {
@@ -106,42 +170,74 @@ class _VTransifyState extends State<VTransify> {
     });
   }
 
+  // <---- Determine Player Function ---->
   void getPlayerFunction() {
-    if (!_mPlayerInit || !_playbackready || !_mRecorder.isStopped) return;
+    if (!_mPlayerInit || !_playBackReady || !_mRecorder.isStopped) return;
     (_mPlayer.isStopped || _mPlayer.isPaused) ? startPlayer() : stopPlayer();
   }
 
-  // void handleAudioState(AudioState state) {
-  //   setState(() {
-  //     if (audioState == AudioState.fresh_record) {
-  //       // Starts recording
-  //       audioState = AudioState.recording;
-  //       // Finished recording
-  //     } else if (audioState == AudioState.recording) {
-  //       audioState = AudioState.play;
-  //       // Play recorded audio
-  //     } else if (audioState == AudioState.play) {
-  //       audioState = AudioState.stop;
-  //       // Stop recorded audio
-  //     } else if (audioState == AudioState.stop) {
-  //       audioState = AudioState.play;
-  //     }
-  //   });
-  // }
-
+  // <---------------- MAIN-APP Function ---------------->
+  // <---- Determine Recorder-Player Functions ---->
   getPlayRecordFunction() {
-    (_playbackready && _mRecorder.isStopped)
-        ? getPlayerFunction()
-        : getRecordFunction();
+    (_playBackReady && _mRecorder.isStopped) ? getPlayerFunction() : getRecordFunction();
+  }
+
+  // <---- Build Function ---->
+  @override
+  Widget build(BuildContext context) {
+    return audioState == AudioState.uploadDownload
+        ? SpinKitWave(color: Colors.white)
+        : Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: Duration(milliseconds: 300),
+                  padding: EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: handleAudioColour(),
+                  ),
+                  child: RawMaterialButton(
+                    fillColor: Colors.white,
+                    shape: CircleBorder(),
+                    padding: EdgeInsets.all(30),
+                    onPressed: () => getPlayRecordFunction(),
+                    child: getIcon(audioState),
+                  ),
+                ),
+                SizedBox(width: 20),
+                if (audioState == AudioState.play || audioState == AudioState.stop)
+                  Container(
+                    padding: EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: kBackgroundColor,
+                    ),
+                    child: RawMaterialButton(
+                      fillColor: Colors.white,
+                      shape: CircleBorder(),
+                      padding: EdgeInsets.all(30),
+                      onPressed: () => setState(() {
+                        audioState = AudioState.fresh_record;
+                        if (!_mPlayer.isStopped) _mPlayer.stopPlayer();
+                        _playBackReady = false;
+                      }),
+                      child: Icon(Icons.replay, size: 50),
+                    ),
+                  ),
+              ],
+            ),
+          );
   }
 
   Color handleAudioColour() {
     if (audioState == AudioState.recording) {
-      return Colors.deepOrangeAccent.shade700.withOpacity(0.5);
+      return Colors.red.shade800;
     } else if (audioState == AudioState.stop) {
-      return Colors.green.shade900;
+      return Colors.green.shade600;
     } else {
-      return kindaDarkBlue;
+      return kBackgroundColor;
     }
   }
 
@@ -156,58 +252,5 @@ class _VTransifyState extends State<VTransify> {
       default:
         return Icon(Icons.mic, size: 50);
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Vtransify',
-      home: Scaffold(
-        backgroundColor: veryDarkBlue,
-        body: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: Duration(milliseconds: 300),
-                padding: EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: handleAudioColour(),
-                ),
-                child: RawMaterialButton(
-                  fillColor: Colors.white,
-                  shape: CircleBorder(),
-                  padding: EdgeInsets.all(30),
-                  onPressed: () => getPlayRecordFunction(),
-                  child: getIcon(audioState),
-                ),
-              ),
-              SizedBox(width: 20),
-              if (audioState == AudioState.play ||
-                  audioState == AudioState.stop)
-                Container(
-                  padding: EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: kindaDarkBlue,
-                  ),
-                  child: RawMaterialButton(
-                    fillColor: Colors.white,
-                    shape: CircleBorder(),
-                    padding: EdgeInsets.all(30),
-                    onPressed: () => setState(() {
-                      audioState = AudioState.fresh_record;
-                      if (!_mPlayer.isStopped) _mPlayer.stopPlayer();
-                      _playbackready = false;
-                    }),
-                    child: Icon(Icons.replay, size: 50),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
