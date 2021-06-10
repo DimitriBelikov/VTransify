@@ -447,12 +447,12 @@ fabric.properties
 .Python
 [Bb]in
 [Ii]nclude
-[Ll]ib
 [Ll]ib64
 [Ll]ocal
 [Ss]cripts
 pyvenv.cfg
 .venv
 pip-selfcheck.json
+Web-Server/Lib/
 
 # End of https://www.toptal.com/developers/gitignore/api/flutter,flask,python,androidstudio,visualstudiocode
