@@ -11,9 +11,10 @@ class ServerServices {
   // <---- Upload Audio Function ---->
   Future<Map> _uploadAudio(String audioFilePath) async {
     int responseCode; // Response Code
+    String translatedText = '';
 
     // Url's and Requests
-    var url = Uri.http('192.168.225.60:5000', '/translate-voice');
+    var url = Uri.http('192.168.29.175:5000', '/translate-voice');
     var request = http.MultipartRequest('POST', url);
 
     //Getting Audio Length
@@ -36,9 +37,10 @@ class ServerServices {
         print('Server Response = ' + serverResponse);
 
         var decodedServerResponse = jsonDecode(serverResponse);
-        if (decodedServerResponse['Response'] == 200)
-          _redirectPath = jsonDecode(serverResponse)['redirect_path'];
-        else
+        if (decodedServerResponse['Response'] == 200) {
+          _redirectPath = decodedServerResponse['redirect_path'];
+          translatedText = decodedServerResponse['translated_text'];
+        } else
           _redirectPath = '';
       } else {
         responseCode = response.statusCode;
@@ -50,12 +52,13 @@ class ServerServices {
     }
 
     var result = {'responseCode': responseCode, 'redirectPath': _redirectPath};
+    if (translatedText.isNotEmpty) result['translatedText'] = translatedText;
     return result;
   }
 
   Future<String> _downloadAudio(String audioPath) async {
     // Declaring Upload Path
-    Uri downloadUrl = Uri.http('192.168.225.60:5000', '/output-audio/$audioPath');
+    Uri downloadUrl = Uri.http('192.168.29.175:5000', '/output-audio/$audioPath');
 
     // Downloading File from Upload Path
     try {
@@ -66,16 +69,16 @@ class ServerServices {
     }
   }
 
-  Future<String> uploadDownload(String filePath) async {
+  Future<dynamic> uploadDownload(String filePath) async {
     Map uploadResponse = await _uploadAudio(filePath);
     if (uploadResponse['redirectPath'] != '' && uploadResponse['responseCode'] == 200) {
       try {
-        var downloadResponse = await _downloadAudio(uploadResponse['redirectPath']);
-        print('Download Response = ' + downloadResponse);
-        if (downloadResponse.substring(downloadResponse.lastIndexOf('.')) != '.mp3' || downloadResponse == 'DownloadError') {
+        var downloadAudioPath = await _downloadAudio(uploadResponse['redirectPath']);
+        print('Download Response = ' + downloadAudioPath);
+        if (downloadAudioPath.substring(downloadAudioPath.lastIndexOf('.')) != '.mp3' || downloadAudioPath == 'DownloadError') {
           return _errorResponse;
         } else
-          return downloadResponse;
+          return {'audioPath': downloadAudioPath, 'translatedText': uploadResponse['translatedText']};
       } catch (Exception) {
         print(Exception);
         return _errorResponse;

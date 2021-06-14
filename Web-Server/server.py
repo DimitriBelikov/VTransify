@@ -23,8 +23,8 @@ def translate_voice():
         service_response = itoa.inputToOutputAudio(audio_path = audio_filepath)
 
         if service_response != None:
-            response, output_audio = service_response
-            html_responsedata = {'Response': response, 'redirect_path': audio_filename[:audio_filename.rindex('.')]}
+            response, output_audio, translated_text = service_response['response'], service_response['output_filepath'], service_response['translated_text']
+            html_responsedata = {'Response': response, 'redirect_path': audio_filename[:audio_filename.rindex('.')], 'translated_text': translated_text}
         else:
             response = 500
             html_responsedata = {'Response': response}

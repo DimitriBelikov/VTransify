@@ -1,22 +1,28 @@
 // <----- Importing Necessary Modules ----->
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show DeviceOrientation, SystemChrome, SystemUiOverlayStyle;
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 // <----- Importing UserDefined Modules ----->
-import 'alerts.dart';
-import 'services.dart';
+import 'Alerts.dart';
+import 'Audioservices.dart';
 
 // <---- File Constants ---->
 final serverServices = ServerServices();
 enum AudioState { fresh_record, recording, uploadDownload, stop, play }
 const kFrontColor = Color(0xFF26A69A);
 const kBackgroundColor = Color(0xFF00695C);
+String hindiText = 'मुझे मुझे आशा है कि यह ऐप अच्छा काम करता है';
 
 // <---- Main Function ---->
 void main() {
-  runApp(VTransify());
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(statusBarColor: Colors.transparent));
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown])
+      .then((_) => runApp(VTransify()));
 }
 
 // <---- Stateless Base Platform ---->
@@ -25,14 +31,18 @@ class VTransify extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'VTransify',
-      home: Scaffold(
-        backgroundColor: kFrontColor,
-        appBar: AppBar(
-          title: Text('VTransify'),
-          centerTitle: true,
-          backgroundColor: kBackgroundColor,
+      home: SafeArea(
+        child: Scaffold(
+          backgroundColor: kFrontColor,
+          appBar: AppBar(
+            title: Text('VTransify'),
+            centerTitle: true,
+            backgroundColor: kBackgroundColor,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.only(bottomLeft: Radius.circular(12.0), bottomRight: Radius.circular(12.0))),
+          ),
+          body: HomeScreen(),
         ),
-        body: HomeScreen(),
       ),
     );
   }
@@ -46,7 +56,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _playBackReady = false, _mRecorderInit = false, _mPlayerInit = false;
-  late String? audioFilePath;
+  late String? _audioFilePath, _translatedText;
   AudioState audioState = AudioState.fresh_record;
   FlutterSoundPlayer _mPlayer = FlutterSoundPlayer();
   FlutterSoundRecorder _mRecorder = FlutterSoundRecorder();
@@ -113,21 +123,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Update State for UploadDownload
     setState(() {
-      audioFilePath = filepath;
+      _audioFilePath = filepath;
       audioState = AudioState.uploadDownload;
     });
 
-    String responseCode = await serverServices.uploadDownload(audioFilePath!);
-    if (responseCode != 'Error') {
+    dynamic serverResponse = await serverServices.uploadDownload(_audioFilePath!);
+    if (serverResponse != 'Error') {
       setState(() {
-        audioFilePath = responseCode;
+        _audioFilePath = serverResponse['audioPath'];
+        _translatedText = serverResponse['translatedText'];
         audioState = AudioState.play;
       });
     } else {
       setState(() {
         audioState = AudioState.fresh_record;
         _playBackReady = false;
-        audioFilePath = '';
+        _audioFilePath = '';
         Alerts.showAlertDialog(context);
       });
     }
@@ -148,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _mPlayer.resumePlayer();
       else {
         await _mPlayer.startPlayer(
-            fromURI: audioFilePath,
+            fromURI: _audioFilePath,
             sampleRate: 320000,
             whenFinished: () {
               setState(() {
@@ -188,44 +199,84 @@ class _HomeScreenState extends State<HomeScreen> {
     return audioState == AudioState.uploadDownload
         ? SpinKitWave(color: Colors.white)
         : Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                AnimatedContainer(
-                  duration: Duration(milliseconds: 300),
-                  padding: EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: handleAudioColour(),
-                  ),
-                  child: RawMaterialButton(
-                    fillColor: Colors.white,
-                    shape: CircleBorder(),
-                    padding: EdgeInsets.all(30),
-                    onPressed: () => getPlayRecordFunction(),
-                    child: getIcon(audioState),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedContainer(
+                      duration: Duration(milliseconds: 300),
+                      padding: EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: handleAudioColour(),
+                      ),
+                      child: RawMaterialButton(
+                        fillColor: Colors.white,
+                        shape: CircleBorder(),
+                        padding: EdgeInsets.all(30),
+                        onPressed: () => getPlayRecordFunction(),
+                        child: getIcon(audioState),
+                      ),
+                    ),
+                    SizedBox(width: 20),
+                    if (audioState == AudioState.play || audioState == AudioState.stop)
+                      Container(
+                        padding: EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: kBackgroundColor,
+                        ),
+                        child: RawMaterialButton(
+                          fillColor: Colors.white,
+                          shape: CircleBorder(),
+                          padding: EdgeInsets.all(30),
+                          onPressed: () => setState(() {
+                            audioState = AudioState.fresh_record;
+                            if (!_mPlayer.isStopped) _mPlayer.stopPlayer();
+                            _playBackReady = false;
+                          }),
+                          child: Icon(Icons.replay, size: 50),
+                        ),
+                      ),
+                  ],
                 ),
-                SizedBox(width: 20),
                 if (audioState == AudioState.play || audioState == AudioState.stop)
                   Container(
-                    padding: EdgeInsets.all(24),
+                    margin: EdgeInsets.all(25.0),
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: kBackgroundColor,
+                      borderRadius: BorderRadius.circular(10.0),
+                      color: Colors.orange,
                     ),
-                    child: RawMaterialButton(
-                      fillColor: Colors.white,
-                      shape: CircleBorder(),
-                      padding: EdgeInsets.all(30),
-                      onPressed: () => setState(() {
-                        audioState = AudioState.fresh_record;
-                        if (!_mPlayer.isStopped) _mPlayer.stopPlayer();
-                        _playBackReady = false;
-                      }),
-                      child: Icon(Icons.replay, size: 50),
+                    width: 400.0,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          child: Text(
+                            'TRANSLATION',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontFamily: 'NotoSerif',
+                              color: Colors.white,
+                            ),
+                          ),
+                          padding: EdgeInsets.all(10.0),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.all(10.0),
+                          child: Text(
+                            _translatedText!,
+                            style: TextStyle(
+                              fontSize: 19,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
+                  )
               ],
             ),
           );

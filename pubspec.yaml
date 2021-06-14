@@ -26,3 +26,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  fonts:
+    - family: NotoSerif
+      fonts:
+        - asset: fonts\NotoSerif-Regular.ttf

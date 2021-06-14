@@ -51,7 +51,7 @@ class InputToOutputAudio:
             output_audio.save(output_audio_path)
             print('<========================================>\n')
 
-            return response, output_audio_path
+            return {'response': response, 'output_filepath': output_audio_path, 'translated_text': translated_text}
         else:
             return None
 
@@ -66,7 +66,7 @@ class RandomTextGenerator:
             if random_2 < 6:
                 random_3 = str(randint(1,9))
             else:
-                random_3 = chr(randint(65,91))
+                random_3 = chr(randint(65,90))
 
             filename += random_3
         return filename
