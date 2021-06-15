@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/http.dart' as http;
+import 'package:vtransify/DropDownList.dart';
 
 class ServerServices {
   String _redirectPath = '';
@@ -26,8 +27,14 @@ class ServerServices {
       'audio_file',
       audioFilePath,
     );
-    request.files.add(multiPartFile);
 
+    // Creating Request Components
+    request.files.add(multiPartFile);
+    Map languageList = Languages.getLanguageMap();
+    request.fields['from_lang'] = languageList[DropDownList.getVariable('From Language')];
+    request.fields['to_lang'] = languageList[DropDownList.getVariable('To Language')];
+
+    // Sending Request and Handling Errors
     try {
       var response = await request.send();
 
@@ -50,12 +57,14 @@ class ServerServices {
       responseCode = 404;
       print(Exception.toString());
     }
+    DropDownList.resetVariables();
 
     var result = {'responseCode': responseCode, 'redirectPath': _redirectPath};
     if (translatedText.isNotEmpty) result['translatedText'] = translatedText;
     return result;
   }
 
+  // <---- Download Audio Function ---->
   Future<String> _downloadAudio(String audioPath) async {
     // Declaring Upload Path
     Uri downloadUrl = Uri.http('192.168.29.175:5000', '/output-audio/$audioPath');
@@ -69,6 +78,7 @@ class ServerServices {
     }
   }
 
+  // <---- Upload-Download Function ---->
   Future<dynamic> uploadDownload(String filePath) async {
     Map uploadResponse = await _uploadAudio(filePath);
     if (uploadResponse['redirectPath'] != '' && uploadResponse['responseCode'] == 200) {
@@ -86,5 +96,24 @@ class ServerServices {
     } else {
       return _errorResponse;
     }
+  }
+}
+
+class Languages {
+  static String toLang = 'Select Language';
+  static Map<String, String> _availableLanguages = {
+    'Hindi': 'hi-IN',
+    'English': 'en-US',
+    'Malayalam': 'ml-IN',
+    'Telugu': 'te-IN',
+    'Tamil': 'ta-IN'
+  };
+
+  static List<String> getLanguageList() {
+    return _availableLanguages.keys.toList();
+  }
+
+  static Map<String, String> getLanguageMap() {
+    return _availableLanguages;
   }
 }

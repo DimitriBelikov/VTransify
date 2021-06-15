@@ -8,7 +8,8 @@ import 'package:permission_handler/permission_handler.dart';
 
 // <----- Importing UserDefined Modules ----->
 import 'Alerts.dart';
-import 'Audioservices.dart';
+import 'DropDownList.dart';
+import 'Services.dart';
 
 // <---- File Constants ---->
 final serverServices = ServerServices();
@@ -109,11 +110,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // <---- Start Recording Function ---->
   void startRecording() async {
-    await _mRecorder.startRecorder(toFile: 'sample_voice.mp3', numChannels: 1, bitRate: 320000, sampleRate: 17000);
-    setState(() {
-      _playBackReady = true;
-      audioState = AudioState.recording;
-    });
+    if (DropDownList.getVariable('To Languages') != 'Select Language') {
+      await _mRecorder.startRecorder(toFile: 'sample_voice.mp3', numChannels: 1, bitRate: 320000, sampleRate: 17000);
+      setState(() {
+        _playBackReady = true;
+        audioState = AudioState.recording;
+      });
+    } else {
+      setState(() {
+        audioState = AudioState.fresh_record;
+        Alerts.showAlertDialog(context, chooseLanguageError);
+      });
+    }
   }
 
   // <---- Stop Recording Function ---->
@@ -139,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
         audioState = AudioState.fresh_record;
         _playBackReady = false;
         _audioFilePath = '';
-        Alerts.showAlertDialog(context);
+        Alerts.showAlertDialog(context, serverError);
       });
     }
   }
@@ -202,6 +210,25 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                if (audioState == AudioState.fresh_record)
+                  Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 0),
+                        child: Row(
+                          children: [
+                            Expanded(child: DropDownList('From Language')),
+                            SizedBox(
+                              width: 30,
+                            ),
+                            Expanded(child: DropDownList('To Language'))
+                          ],
+                          mainAxisAlignment: MainAxisAlignment.center,
+                        ),
+                      ),
+                      SizedBox(height: 50),
+                    ],
+                  ),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -242,41 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                   ],
                 ),
-                if (audioState == AudioState.play || audioState == AudioState.stop)
-                  Container(
-                    margin: EdgeInsets.all(25.0),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10.0),
-                      color: Colors.orange,
-                    ),
-                    width: 400.0,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          child: Text(
-                            'TRANSLATION',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontFamily: 'NotoSerif',
-                              color: Colors.white,
-                            ),
-                          ),
-                          padding: EdgeInsets.all(10.0),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.all(10.0),
-                          child: Text(
-                            _translatedText!,
-                            style: TextStyle(
-                              fontSize: 19,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
+                if (audioState == AudioState.play || audioState == AudioState.stop) TranslateBox(translatedText: hindiText)
               ],
             ),
           );
@@ -303,5 +296,54 @@ class _HomeScreenState extends State<HomeScreen> {
       default:
         return Icon(Icons.mic, size: 50);
     }
+  }
+}
+
+// <---- TranslateBox Widget Stateless ---->
+class TranslateBox extends StatelessWidget {
+  const TranslateBox({
+    Key? key,
+    required String? translatedText,
+  })  : _translatedText = translatedText,
+        super(key: key);
+
+  final String? _translatedText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.all(25.0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10.0),
+        color: Colors.orange,
+      ),
+      width: 400.0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            child: Text(
+              'TRANSLATION',
+              style: TextStyle(
+                fontSize: 12,
+                fontFamily: 'NotoSerif',
+                color: Colors.white,
+              ),
+            ),
+            padding: EdgeInsets.all(10.0),
+          ),
+          Padding(
+            padding: EdgeInsets.all(10.0),
+            child: Text(
+              _translatedText!,
+              style: TextStyle(
+                fontSize: 19,
+                color: Colors.black,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
