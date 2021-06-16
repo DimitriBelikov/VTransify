@@ -65,52 +65,51 @@ class _HomeScreenState extends State<HomeScreen> {
   // <---- Overriding Init State ---->
   @override
   void initState() {
-    openAudioSources().then((value) {
-      setState(() {
-        _mRecorderInit = true;
-        _mPlayerInit = true;
-      });
+    requestRecordPermission().then((value) {
+      setState(() {});
     });
     super.initState();
   }
 
-  // <---- Overriding Dispose State ---->
-  @override
-  void dispose() {
-    _mPlayer.closeAudioSession();
-    _mPlayerInit = false;
-
-    _mRecorder.closeAudioSession();
-    _mRecorderInit = false;
-    print('Screen Disposed');
-    super.dispose();
-  }
-
   // <---- Open Audio Sources for Playing and Recording ---->
-  Future openAudioSources() async {
+  Future requestRecordPermission() async {
     var status = await Permission.microphone.request();
-    print(status.isGranted);
-    if (status != PermissionStatus.granted) {
+
+    if (status == PermissionStatus.granted) {
       print('Permission Granted');
     }
+  }
 
-    print(_mRecorderInit);
-    print(_mPlayerInit);
+  // <---- Open Recording Audio Session ---->
+  Future _openRecorderSession() async {
+    await _mRecorder.openAudioSession();
+    _mRecorderInit = true;
+  }
 
-    if (!_mPlayerInit) {
-      await _mPlayer.openAudioSession();
-    }
+  // <---- Open Player Audio Session ---->
+  Future _openPlayerSession() async {
+    await _mPlayer.openAudioSession();
+    _mPlayerInit = true;
+  }
 
-    if (!_mRecorderInit) {
-      await _mRecorder.openAudioSession();
-    }
+  // <---- Close Recording Audio Session ---->
+  Future _closeRecorderSession() async {
+    _mRecorder.closeAudioSession();
+    _mRecorderInit = false;
+  }
+
+  // <---- Close Player Audio Session ---->
+  Future _closePlayerSession() async {
+    _mPlayer.closeAudioSession();
+    _mPlayerInit = false;
   }
 
   // <---------------- RECORDER FUNCTIONS ---------------->
 
   // <---- Start Recording Function ---->
   void startRecording() async {
-    if (DropDownList.getVariable('To Languages') != 'Select Language') {
+    if (DropDownList.getVariable('To Languages') != 'Select Language' ||
+        DropDownList.getVariable('From Languages') != 'Select Language') {
       await _mRecorder.startRecorder(toFile: 'sample_voice.mp3', numChannels: 1, bitRate: 320000, sampleRate: 17000);
       setState(() {
         _playBackReady = true;
@@ -133,6 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _audioFilePath = filepath;
       audioState = AudioState.uploadDownload;
+      _closeRecorderSession();
     });
 
     dynamic serverResponse = await serverServices.uploadDownload(_audioFilePath!);
@@ -154,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // <---- Determine Recording State Function ---->
   void getRecordFunction() async {
-    if (!_mRecorderInit) return;
+    if (!_mRecorderInit) _openRecorderSession();
     return _mRecorder.isStopped ? startRecording() : stopRecording();
   }
 
@@ -190,7 +190,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // <---- Determine Player Function ---->
-  void getPlayerFunction() {
+  void getPlayerFunction() async {
+    if (!_mPlayerInit) _openPlayerSession();
     if (!_mPlayerInit || !_playBackReady || !_mRecorder.isStopped) return;
     (_mPlayer.isStopped || _mPlayer.isPaused) ? startPlayer() : stopPlayer();
   }
@@ -261,7 +262,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           padding: EdgeInsets.all(30),
                           onPressed: () => setState(() {
                             audioState = AudioState.fresh_record;
-                            if (!_mPlayer.isStopped) _mPlayer.stopPlayer();
+                            if (!_mPlayer.isStopped) {
+                              _mPlayer.stopPlayer();
+                              _closePlayerSession();
+                            }
                             _playBackReady = false;
                           }),
                           child: Icon(Icons.replay, size: 50),
