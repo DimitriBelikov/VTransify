@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:vtransify/DropDownList.dart';
 
 class ServerServices {
@@ -11,51 +12,55 @@ class ServerServices {
 
   // <---- Upload Audio Function ---->
   Future<Map> _uploadAudio(String audioFilePath) async {
-    int responseCode; // Response Code
+    late int responseCode; // Response Code
     String translatedText = '';
 
     // Url's and Requests
     var url = Uri.http('192.168.29.175:5000', '/translate-voice');
-    var request = http.MultipartRequest('POST', url);
+    int uploadTryCount = 3;
 
-    //Getting Audio Length
-    var audioLength = await File(audioFilePath).length();
-    print(audioLength);
+    while(uploadTryCount-- > 0){
+      var request = http.MultipartRequest('POST', url);
+      //Getting Audio Length
+      var audioLength = await File(audioFilePath).length();
+      print(audioLength);
 
-    // Creating Multipart file and Adding to Requests
-    var multiPartFile = await http.MultipartFile.fromPath(
-      'audio_file',
-      audioFilePath,
-    );
+      // Creating Multipart file and Adding to Requests
+      var multiPartFile = await http.MultipartFile.fromPath(
+        'audio_file',
+        audioFilePath,
+        contentType: MediaType('audio', 'mp3'),
+      );
 
-    // Creating Request Components
-    request.files.add(multiPartFile);
-    Map languageList = Languages.getLanguageMap();
-    request.fields['from_lang'] = languageList[DropDownList.getVariable('From Language')];
-    request.fields['to_lang'] = languageList[DropDownList.getVariable('To Language')];
+      // Creating Request Components
+      request.files.add(multiPartFile);
+      Map languageList = Languages.getLanguageMap();
+      request.fields['from_lang'] = languageList[DropDownList.getVariable('From Language')];
+      request.fields['to_lang'] = languageList[DropDownList.getVariable('To Language')];
 
-    // Sending Request and Handling Errors
-    try {
-      var response = await request.send();
+      // Sending Request and Handling Errors
+      try {
+        var response = await request.send();
+        if (response.statusCode == 200) {
+          responseCode = response.statusCode;
+          String serverResponse = await response.stream.bytesToString();
+          print('Server Response = ' + serverResponse);
 
-      if (response.statusCode == 200) {
-        responseCode = response.statusCode;
-        String serverResponse = await response.stream.bytesToString();
-        print('Server Response = ' + serverResponse);
-
-        var decodedServerResponse = jsonDecode(serverResponse);
-        if (decodedServerResponse['Response'] == 200) {
-          _redirectPath = decodedServerResponse['redirect_path'];
-          translatedText = decodedServerResponse['translated_text'];
-        } else
+          var decodedServerResponse = jsonDecode(serverResponse);
+          if (decodedServerResponse['Response'] == 200) {
+            _redirectPath = decodedServerResponse['redirect_path'];
+            translatedText = decodedServerResponse['translated_text'];
+            break;
+          } else
+            _redirectPath = '';
+        } else {
+          responseCode = response.statusCode;
           _redirectPath = '';
-      } else {
-        responseCode = response.statusCode;
-        _redirectPath = '';
+        }
+      } catch (Exception) {
+        responseCode = 404;
+        print(Exception.toString());
       }
-    } catch (Exception) {
-      responseCode = 404;
-      print(Exception.toString());
     }
     DropDownList.resetVariables();
 
@@ -85,7 +90,7 @@ class ServerServices {
       try {
         var downloadAudioPath = await _downloadAudio(uploadResponse['redirectPath']);
         print('Download Response = ' + downloadAudioPath);
-        if (downloadAudioPath.substring(downloadAudioPath.lastIndexOf('.')) != '.mp3' || downloadAudioPath == 'DownloadError') {
+        if (downloadAudioPath.substring(downloadAudioPath.lastIndexOf('.')) != '.wav' || downloadAudioPath == 'DownloadError') {
           return _errorResponse;
         } else
           return {'audioPath': downloadAudioPath, 'translatedText': uploadResponse['translatedText']};

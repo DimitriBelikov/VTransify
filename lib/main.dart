@@ -1,10 +1,15 @@
 // <----- Importing Necessary Modules ----->
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show DeviceOrientation, SystemChrome, SystemUiOverlayStyle;
 import 'package:flutter_sound/flutter_sound.dart';
+import 'package:flutter_sound_platform_interface/flutter_sound_platform_interface.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
 
 // <----- Importing UserDefined Modules ----->
 import 'Alerts.dart';
@@ -16,7 +21,6 @@ final serverServices = ServerServices();
 enum AudioState { fresh_record, recording, uploadDownload, stop, play }
 const kFrontColor = Color(0xFF26A69A);
 const kBackgroundColor = Color(0xFF00695C);
-String hindiText = 'मुझे मुझे आशा है कि यह ऐप अच्छा काम करता है';
 
 // <---- Main Function ---->
 void main() {
@@ -61,28 +65,48 @@ class _HomeScreenState extends State<HomeScreen> {
   AudioState audioState = AudioState.fresh_record;
   FlutterSoundPlayer _mPlayer = FlutterSoundPlayer();
   FlutterSoundRecorder _mRecorder = FlutterSoundRecorder();
+  Codec _codec = Codec.mp3;
 
   // <---- Overriding Init State ---->
   @override
   void initState() {
-    requestRecordPermission().then((value) {
-      setState(() {});
-    });
+    init();
     super.initState();
   }
 
-  // <---- Open Audio Sources for Playing and Recording ---->
-  Future requestRecordPermission() async {
-    var status = await Permission.microphone.request();
-
-    if (status == PermissionStatus.granted) {
-      print('Permission Granted');
-    }
+  @override
+  void dispose() {
+    _closeRecorderSession();
+    super.dispose();
   }
+
+  void init() async {
+    await _openRecorderSession();
+    await _mRecorder.setSubscriptionDuration(Duration(milliseconds: 10));
+    PermissionStatus status = await Permission.microphone.request();
+    if (status != PermissionStatus.granted) {
+      throw RecordingPermissionException("Microphone permission not granted");
+    }
+    if (!_mPlayerInit) _openPlayerSession();
+  }
+
+  // // <---- Open Audio Sources for Playing and Recording ---->
+  // Future requestRecordPermission() async {
+  //   var status = await Permission.microphone.request();
+  //
+  //   if (status == PermissionStatus.granted) {
+  //     print('Permission Granted');
+  //   }
+  // }
 
   // <---- Open Recording Audio Session ---->
   Future _openRecorderSession() async {
-    await _mRecorder.openAudioSession();
+    await _mRecorder.openAudioSession(
+      focus: AudioFocus.requestFocusTransient,
+      category: SessionCategory.playAndRecord,
+      mode: SessionMode.modeDefault,
+    );
+
     _mRecorderInit = true;
   }
 
@@ -94,8 +118,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // <---- Close Recording Audio Session ---->
   Future _closeRecorderSession() async {
-    _mRecorder.closeAudioSession();
-    _mRecorderInit = false;
+    try {
+      await _mRecorder.closeAudioSession();
+      _mRecorderInit = false;
+    } catch (e) {
+      debugPrint('Released unsuccessful');
+      debugPrint(e.toString());
+    }
   }
 
   // <---- Close Player Audio Session ---->
@@ -108,9 +137,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // <---- Start Recording Function ---->
   void startRecording() async {
+    Directory tempDir = await getTemporaryDirectory();
+    var toFile = '${tempDir.path}/${Uuid().v4()}${ext[_codec.index]}';
+    print('Mine: ' + toFile);
+
     if (DropDownList.getVariable('To Languages') != 'Select Language' ||
         DropDownList.getVariable('From Languages') != 'Select Language') {
-      await _mRecorder.startRecorder(toFile: 'sample_voice.mp3', numChannels: 1, bitRate: 320000, sampleRate: 17000);
+      await _mRecorder.startRecorder(
+        toFile: toFile,
+        bitRate: 320000,
+        sampleRate: 17000,
+        numChannels: 1,
+      );
       setState(() {
         _playBackReady = true;
         audioState = AudioState.recording;
@@ -132,7 +170,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _audioFilePath = filepath;
       audioState = AudioState.uploadDownload;
-      _closeRecorderSession();
     });
 
     dynamic serverResponse = await serverServices.uploadDownload(_audioFilePath!);
@@ -191,7 +228,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // <---- Determine Player Function ---->
   void getPlayerFunction() async {
-    if (!_mPlayerInit) _openPlayerSession();
     if (!_mPlayerInit || !_playBackReady || !_mRecorder.isStopped) return;
     (_mPlayer.isStopped || _mPlayer.isPaused) ? startPlayer() : stopPlayer();
   }
@@ -273,7 +309,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                   ],
                 ),
-                if (audioState == AudioState.play || audioState == AudioState.stop) TranslateBox(translatedText: hindiText)
+                if (audioState == AudioState.play || audioState == AudioState.stop)
+                  TranslateBox(translatedText: _translatedText)
               ],
             ),
           );
